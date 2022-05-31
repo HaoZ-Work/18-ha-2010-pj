@@ -15,6 +15,27 @@ from ecgdetectors import Detectors
 import os
 from typing import List, Tuple
 
+
+import numpy as np
+import pandas as pd
+from glob import glob
+import scipy.io as sio
+from sklearn import preprocessing
+
+import pytorch_lightning as pl
+import torch
+import torch.nn as nn
+import torchmetrics
+from torch.nn import MSELoss
+from torch.optim import Adam
+from torch.utils.data import DataLoader, Dataset
+from pytorch_lightning.callbacks.early_stopping import EarlyStopping
+from train import *
+
+
+
+
+
 ###Signatur der Methode (Parameter und Anzahl return-Werte) darf nicht verändert werden
 def predict_labels(ecg_leads : List[np.ndarray], fs : float, ecg_names : List[str], model_name : str='model.npy',is_binary_classifier : bool=False) -> List[Tuple[str,str]]:
     '''
@@ -40,25 +61,48 @@ def predict_labels(ecg_leads : List[np.ndarray], fs : float, ecg_names : List[st
     '''
 
 #------------------------------------------------------------------------------
-# Euer Code ab hier  
-    with open(model_name, 'rb') as f:  
-        th_opt = np.load(f)         # Lade simples Model (1 Parameter)
+# Euer Code ab hier
+    ## Load data and create meta data
+    from train import MyModel
+    test_data_dir = "../test/"
+    test_data_path = glob(test_data_dir + "*mat")
+    test_path_id_dic = {x.split('/')[-1].split('.')[0]: x for x in test_data_path}
 
-    detectors = Detectors(fs)        # Initialisierung des QRS-Detektors
+    reference = pd.read_csv(test_data_dir + "REFERENCE.csv", header=None)
+    reference = reference.rename(columns={0: 'id', 1: "label"})
+    reference_dic = dict(zip(reference['id'].to_list(), reference['label'].to_list()))
 
+    meta_pd = pd.DataFrame(columns=["id", "path", "label"])
+    meta_pd['id'] = test_path_id_dic.keys()
+    meta_pd['path'] = meta_pd['id'].map(test_path_id_dic.get)
+    meta_pd['label'] = meta_pd['id'].map(reference_dic.get)
+    meta_pd['encoded_label'] = pd.Categorical(meta_pd['label']).codes
+    meta_pd['data'] = meta_pd['path'].map(get_mat)
+    meta_pd['mean'] = meta_pd['data'].map(np.mean)
+    meta_pd['std'] = meta_pd['data'].map(np.std)
+    meta_pd['length'] = meta_pd['data'].map(np.shape)
+    # print(meta_pd.head().data)
+
+    meta_precessed_pd = preprocess(meta=meta_pd, func_list=[ecg_pad_repeat, ecg_fourier, ecg_norm, ecg_stand])
+
+    ecg_test_dataset = ecg_Dataset(meta_precessed_pd['preprocessed_data'], meta_precessed_pd['encoded_label'])
+    ecg_test_dataloader = DataLoader(ecg_test_dataset, batch_size=2)
+
+
+    model = torch.load("tmp/saved_model")
+    trainer = pl.Trainer(accelerator="gpu", devices=1, gpus=0)
+    preds=trainer.predict(model, dataloaders=ecg_test_dataloader)
     predictions = list()
-    
-    for idx,ecg_lead in enumerate(ecg_leads):
-        r_peaks = detectors.hamilton_detector(ecg_lead)     # Detektion der QRS-Komplexe
-        sdnn = np.std(np.diff(r_peaks)/fs*1000) 
-        if sdnn < th_opt:
-            predictions.append((ecg_names[idx], 'N'))
-        else:
-            predictions.append((ecg_names[idx], 'A'))
-        if ((idx+1) % 100)==0:
-            print(str(idx+1) + "\t Dateien wurden verarbeitet.")
-            
-            
+    true_labels = ['A','N','O','~']
+    # print(preds)
+    for idx, pred in enumerate(*preds):
+        # print(pred)
+        predictions.append((meta_precessed_pd['id'].iloc[idx], true_labels[idx]))
+
+    # print(predictions)
+
+
+    # predictions.append((ecg_names[idx], 'A'))
 #------------------------------------------------------------------------------    
     return predictions # Liste von Tupels im Format (ecg_name,label) - Muss unverändert bleiben!
                                

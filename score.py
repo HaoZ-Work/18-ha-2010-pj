@@ -113,7 +113,7 @@ def score(test_dir='../test/'):
     sum_o = No + Ao + Oo + Po
     sum_p = Np + Ap + Op + Pp
    
-    F1 = TP / (TP + 1/2*(FP+FN)) 
+    F1 = TP / (TP + 1/2*(FP+FN))
 
 
     # Confusion Matrix zur Evaluation
