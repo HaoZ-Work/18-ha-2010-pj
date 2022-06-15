@@ -18,7 +18,7 @@ from wettbewerb import load_references, save_predictions
 import argparse
 import time
 
-from train import *
+
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Predict given Model')

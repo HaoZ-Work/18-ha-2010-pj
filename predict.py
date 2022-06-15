@@ -63,7 +63,7 @@ def predict_labels(ecg_leads : List[np.ndarray], fs : float, ecg_names : List[st
 #------------------------------------------------------------------------------
 # Euer Code ab hier
     ## Load data and create meta data
-    from train import MyModel
+
     test_data_dir = "../test/"
     test_data_path = glob(test_data_dir + "*mat")
     test_path_id_dic = {x.split('/')[-1].split('.')[0]: x for x in test_data_path}
@@ -83,15 +83,20 @@ def predict_labels(ecg_leads : List[np.ndarray], fs : float, ecg_names : List[st
     meta_pd['length'] = meta_pd['data'].map(np.shape)
     # print(meta_pd.head().data)
 
-    meta_precessed_pd = preprocess(meta=meta_pd, func_list=[ecg_pad_repeat, ecg_fourier, ecg_norm, ecg_stand])
+
+    meta_precessed_pd = preprocess(meta=meta_pd, func_list=[ecg_len_norm, ecg_norm, ])
+
+
 
     ecg_test_dataset = ecg_Dataset(meta_precessed_pd['preprocessed_data'], meta_precessed_pd['encoded_label'])
-    ecg_test_dataloader = DataLoader(ecg_test_dataset, batch_size=2)
+    ecg_test_dataloader = DataLoader(ecg_test_dataset, batch_size=10)
 
 
-    model = torch.load("tmp/saved_model")
+    #saved_model = MyModel(4501, 3000, 2000, 1000, 500, 4, [])
+    saved_model = MyModel(1, 4,[])
+    saved_model.load_state_dict(torch.load("mymodel"))
     trainer = pl.Trainer(accelerator="gpu", devices=1, gpus=0)
-    preds=trainer.predict(model, dataloaders=ecg_test_dataloader)
+    preds = trainer.predict(saved_model, dataloaders=ecg_test_dataloader)
     predictions = list()
     true_labels = ['A','N','O','~']
     # print(preds)

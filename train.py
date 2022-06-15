@@ -21,14 +21,15 @@ from torch.nn import MSELoss
 from torch.optim import Adam
 from torch.utils.data import DataLoader, Dataset
 from pytorch_lightning.callbacks.early_stopping import EarlyStopping
-
+import warnings
+warnings.filterwarnings("ignore")
 import matplotlib.pyplot as plt
 import seaborn as sns
 
 MAX_LEN = 18286
 MIN_LEN = 2714
-LR = 1e-5
-BATCH_SIZE = 64
+LR = 1e-4
+BATCH_SIZE = 30
 
 
 def get_mat(mat_path):
@@ -78,7 +79,7 @@ def ecg_norm(ecg_np):
 
     '''
     ecg_np = ecg_np.reshape(1, -1)
-    re = preprocessing.Normalizer().fit_transform(ecg_np)[0]
+    re = preprocessing.Normalizer().fit_transform(ecg_np)[0]-0.5
 
     return re
 
@@ -112,7 +113,7 @@ def ecg_pad_repeat(ecg_np):
 
     '''
 
-    re = np.pad(ecg_np, (0, MAX_LEN - ecg_np.shape[0]), 'reflect')
+    re = np.pad(ecg_np, (0, MAX_LEN - ecg_np.shape[0]), 'wrap')
     # low the avg scroes
 
     return re
@@ -151,6 +152,78 @@ def ecg_stand(ecg_np):
     return re
 
 
+def cut_recording(ecg: np.array, length_threshold=9000):
+    len_overlap = int(0.5 * length_threshold)
+    start = 0
+    end = 9000
+    re = []
+    re.append(ecg[start:end])
+    while True:
+        if end + len_overlap > len(ecg):
+            re.append(ecg[-9000:])
+            break
+        re.append(ecg[start + len_overlap:end + len_overlap])
+        start += len_overlap
+        end += len_overlap
+
+    # print(ecg)
+
+    return re
+def data_len_norm(meta):
+    '''
+    Normalize the lengh of data follwing the idea from paper:
+    https://res.mdpi.com/d_attachment/sensors/sensors-20-02136/article_deploy/sensors-20-02136.pdf
+
+    Args:
+
+        meta: pd.Dataframe, meta date in pd form.
+
+    return:
+        re: meta data after  processing
+
+    '''
+
+    re_pd = meta.copy()
+    # print(len(re_pd))
+    for row in re_pd.iterrows():
+        if row[1]['length'][0] > 9000:
+            adding_list = cut_recording(row[1]['data'])
+
+            for n in adding_list:
+                new_recording = meta.iloc[row[0]].copy()
+                new_recording['data'] = n
+                new_recording['id'] = 'extra_' + new_recording['id']
+                new_recording['length'] = 9000
+                # print(new_recording)
+                re_pd = re_pd.append(new_recording, ignore_index=True)
+
+            re_pd.drop(row[0], inplace=True)
+
+        if row[1]['length'][0] < 9000:
+            pass
+
+    return re_pd
+
+
+def ecg_len_norm(ecg_np):
+    '''
+    Be used in preprocess() to make the length be 9000 (over 9000 then cut, under 9000 then repeat)
+
+    Args:
+        ecg_np: ecg data in np.array form in shape of (N,)
+
+    return:
+        re: processed data in array form
+
+    '''
+    if len(ecg_np) < 9000:
+        re = np.pad(ecg_np, (0, 9000 - ecg_np.shape[0]), 'reflect')
+    elif len(ecg_np) > 9000:
+        re = ecg_np[:9000]
+    else:
+        re = ecg_np
+
+    return re
 def data_ros(meta, cc_dict):
     '''
     Be used in preprocess() to perform Rondom over sampling. To address the imbalance problem.
@@ -262,34 +335,233 @@ class ecg_Dataset(Dataset):
         return self.X_pd.iloc[idx], self.y_pd.iloc[idx]
 
 
+# class MyModel(pl.LightningModule):
+#     def __init__(
+#             self,
+#             num_inputs,
+#             num_hidden_1,
+#             num_hidden_2,
+#             num_hidden_3,
+#             num_hidden_4,
+#             num_outputs,
+#             dataloaders,
+#     ):
+#         super().__init__()
+#
+#         self.linear1 = nn.Linear(num_inputs, num_hidden_1)
+#         self.ac1 = nn.ReLU()
+#
+#         self.linear2 = nn.Linear(num_hidden_1, num_hidden_2)
+#         self.ac2 = nn.ReLU()
+#
+#         self.linear3 = nn.Linear(num_hidden_2, num_hidden_3)
+#         self.ac3 = nn.ReLU()
+#
+#         self.linear4 = nn.Linear(num_hidden_3, num_hidden_4)
+#         self.ac4 = nn.ReLU()
+#
+#         self.out = nn.Linear(num_hidden_4, num_outputs)
+#
+#         self.softmax = nn.Softmax(dim=1)
+#
+#         self.criterion = nn.CrossEntropyLoss()
+#
+#         self.train_accuracy = torchmetrics.F1Score()
+#
+#         self.val_accuracy = torchmetrics.F1Score()
+#         self.test_accuracy = torchmetrics.F1Score()
+#         self.dataloaders = dataloaders
+#
+#     def forward(self, inputs, labels=None):
+#
+#         inputs = inputs.float()
+#
+#         outputs = self.linear1(inputs)
+#         outputs = self.ac1(outputs)
+#
+#         outputs = self.linear2(outputs)
+#         outputs = self.ac2(outputs)
+#
+#         outputs = self.linear3(outputs)
+#         outputs = self.ac3(outputs)
+#
+#         outputs = self.linear4(outputs)
+#         outputs = self.ac4(outputs)
+#
+#         outputs = self.out(outputs)
+#
+#         outputs = self.softmax(outputs)
+#
+#         return outputs
+#     def predict_step(self, batch, batch_idx):
+#         inputs, labels = batch
+#
+#         labels = labels.long()
+#
+#         outputs = self(inputs)
+#
+#         # outputs = torch.argmax(outputs, dim=1)
+#
+#         preds = torch.argmax(outputs, dim=1)
+#
+#
+#
+#         return preds
+#
+#
+#     def train_dataloader(self):
+#         # ecg_train_dataset = ecg_Dataset(X_train_pd, y_train_pd)
+#         # return DataLoader(ecg_train_dataset, batch_size=100)
+#
+#         return self.dataloaders[0]
+#
+#     def val_dataloader(self):
+#         # ecg_val_dataset = ecg_Dataset(X_val_pd, y_val_pd)
+#         # return DataLoader(ecg_val_dataset, batch_size=100)
+#
+#         return self.dataloaders[1]
+#
+#     def test_dataloader(self):
+#         # ecg_test_dataset = ecg_Dataset(X_test_pd, y_test_pd)
+#         # return DataLoader(ecg_test_dataset, batch_size=100)
+#         return self.dataloaders[2]
+#
+#     def training_step(self, batch, batch_idx):
+#         inputs, labels = batch
+#
+#         labels = labels.long()
+#
+#         outputs = self(inputs)
+#
+#         # outputs = torch.argmax(outputs, dim=1)
+#
+#         preds = torch.argmax(outputs, dim=1)
+#         # print(preds)
+#         self.train_accuracy(preds, labels)
+#
+#         # print("training acc:",self.train_accuracy(outputs, labels))
+#         loss = self.criterion(outputs, labels)
+#         # print("trainingh Loss:",loss)
+#
+#         self.log("train_loss", loss)
+#
+#         return loss
+#
+#     def validation_step(self, batch, batch_idx):
+#         inputs, labels = batch
+#         # inputs = inputs.long().view(inputs.size(0), -1)
+#         labels = labels.long()
+#
+#         outputs = self(inputs)
+#         # outputs = torch.argmax(outputs, dim=1)
+#         preds = torch.argmax(outputs, dim=1)
+#         self.val_accuracy(preds, labels)
+#         # print("val acc:",self.val_accuracy(outputs, labels))
+#         # print("total val acc:",self.val_accuracy.compute())
+#
+#         loss = self.criterion(outputs, labels)
+#         # print("VAL Loss:",loss)
+#
+#         self.log("val_loss", loss)
+#
+#     def validation_epoch_end(self, outs):
+#         print("total val acc:", self.val_accuracy.compute())
+#         print("*" * 25)
+#
+#     def training_epoch_end(self, outs):
+#         # print(   compute_epoch_loss_from_outputs(outs))
+#         print("total training acc:", self.train_accuracy.compute())
+#
+#     def configure_optimizers(self):
+#         decayRate = 0.96
+#         optimizer = Adam(self.parameters(), lr=LR)
+#         scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer=optimizer, gamma=decayRate)
+#
+#         return [optimizer], [scheduler]
+#
+#     def test_step(self, batch, batch_idx):
+#         inputs, labels = batch
+#         # inputs = inputs.long().view(inputs.size(0), -1)
+#         labels = labels.long()
+#
+#         outputs = self(inputs)
+#         # outputs = torch.argmax(outputs, dim=1)
+#         preds = torch.argmax(outputs, dim=1)
+#
+#         # print(preds)
+#
+#         self.test_accuracy(preds, labels)
+#
+#     def test_epoch_end(self, outs):
+#         # print(   compute_epoch_loss_from_outputs(outs))
+#         print("total test acc:", self.test_accuracy.compute())
+
 class MyModel(pl.LightningModule):
     def __init__(
             self,
-            num_inputs,
-            num_hidden_1,
-            num_hidden_2,
-            num_hidden_3,
-            num_hidden_4,
-            num_outputs,
+            cin,
+            cout,
+
             dataloaders,
     ):
         super().__init__()
 
-        self.linear1 = nn.Linear(num_inputs, num_hidden_1)
-        self.ac1 = nn.ReLU()
+        self.cin = cin,
+        self.cout = cout
+        self.seq_fft = nn.Sequential(
+            nn.Conv1d(1, 32, 5),
+            nn.ReLU(inplace=True),
+            nn.BatchNorm1d(32),
+            nn.MaxPool1d(2),
 
-        self.linear2 = nn.Linear(num_hidden_1, num_hidden_2)
-        self.ac2 = nn.ReLU()
+            nn.Conv1d(32, 32, 5),
+            nn.ReLU(inplace=True),
+            nn.MaxPool1d(2),
 
-        self.linear3 = nn.Linear(num_hidden_2, num_hidden_3)
-        self.ac3 = nn.ReLU()
+            nn.Conv1d(32, 64, 5),
+            nn.ReLU(inplace=True),
+            nn.MaxPool1d(2),
 
-        self.linear4 = nn.Linear(num_hidden_3, num_hidden_4)
-        self.ac4 = nn.ReLU()
+            nn.Conv1d(64, 64, 5),
+            nn.ReLU(inplace=True),
+            nn.MaxPool1d(2),
 
-        self.out = nn.Linear(num_hidden_4, num_outputs)
+            nn.Conv1d(64, 128, 5),
+            nn.ReLU(inplace=True),
+            nn.MaxPool1d(2),
 
-        self.softmax = nn.Softmax(dim=1)
+            nn.Conv1d(128, 128, 5),
+            nn.ReLU(inplace=True),
+            nn.MaxPool1d(2),
+
+            nn.Conv1d(128, 256, 5),
+            nn.ReLU(inplace=True),
+            nn.MaxPool1d(2),
+
+            nn.Conv1d(256, 256, 5),
+            nn.ReLU(inplace=True),
+            nn.MaxPool1d(2),
+            nn.Dropout(0.5),
+
+            nn.Conv1d(256, 512, 5),
+            nn.ReLU(inplace=True),
+            nn.MaxPool1d(2),
+
+            nn.Conv1d(512, 512, 5),
+            nn.ReLU(inplace=True),
+            nn.MaxPool1d(2),
+            nn.Dropout(0.5),
+
+            nn.Flatten(),
+            nn.Linear(2048, 128),
+            nn.ReLU(inplace=True),
+            nn.Dropout(0.5),
+            nn.Linear(128, 32),
+            nn.ReLU(inplace=True),
+            nn.Linear(32, self.cout),
+            nn.Softmax(dim=1)
+
+        )
 
         self.criterion = nn.CrossEntropyLoss()
 
@@ -300,30 +572,18 @@ class MyModel(pl.LightningModule):
         self.dataloaders = dataloaders
 
     def forward(self, inputs, labels=None):
-
         inputs = inputs.float()
 
-        outputs = self.linear1(inputs)
-        outputs = self.ac1(outputs)
-
-        outputs = self.linear2(outputs)
-        outputs = self.ac2(outputs)
-
-        outputs = self.linear3(outputs)
-        outputs = self.ac3(outputs)
-
-        outputs = self.linear4(outputs)
-        outputs = self.ac4(outputs)
-
-        outputs = self.out(outputs)
-
-        outputs = self.softmax(outputs)
+        outputs = self.seq_fft(inputs)
 
         return outputs
+
     def predict_step(self, batch, batch_idx):
         inputs, labels = batch
-
+        inputs = inputs.reshape(inputs.shape[0], 1, inputs.shape[1])
+        # inputs = inputs.long().view(inputs.size(0), -1)
         labels = labels.long()
+
 
         outputs = self(inputs)
 
@@ -331,10 +591,7 @@ class MyModel(pl.LightningModule):
 
         preds = torch.argmax(outputs, dim=1)
 
-
-
         return preds
-
 
     def train_dataloader(self):
         # ecg_train_dataset = ecg_Dataset(X_train_pd, y_train_pd)
@@ -356,6 +613,8 @@ class MyModel(pl.LightningModule):
     def training_step(self, batch, batch_idx):
         inputs, labels = batch
 
+        inputs = inputs.reshape(inputs.shape[0], 1, inputs.shape[1])
+        # print(inputs.shape)
         labels = labels.long()
 
         outputs = self(inputs)
@@ -376,6 +635,7 @@ class MyModel(pl.LightningModule):
 
     def validation_step(self, batch, batch_idx):
         inputs, labels = batch
+        inputs = inputs.reshape(inputs.shape[0], 1, inputs.shape[1])
         # inputs = inputs.long().view(inputs.size(0), -1)
         labels = labels.long()
 
@@ -391,23 +651,10 @@ class MyModel(pl.LightningModule):
 
         self.log("val_loss", loss)
 
-    def validation_epoch_end(self, outs):
-        print("total val acc:", self.val_accuracy.compute())
-        print("*" * 25)
-
-    def training_epoch_end(self, outs):
-        # print(   compute_epoch_loss_from_outputs(outs))
-        print("total training acc:", self.train_accuracy.compute())
-
-    def configure_optimizers(self):
-        decayRate = 0.96
-        optimizer = Adam(self.parameters(), lr=LR)
-        scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer=optimizer, gamma=decayRate)
-
-        return [optimizer], [scheduler]
-
     def test_step(self, batch, batch_idx):
         inputs, labels = batch
+        inputs = inputs.reshape(inputs.shape[0], 1, inputs.shape[1])
+
         # inputs = inputs.long().view(inputs.size(0), -1)
         labels = labels.long()
 
@@ -419,9 +666,24 @@ class MyModel(pl.LightningModule):
 
         self.test_accuracy(preds, labels)
 
+    def validation_epoch_end(self, outs):
+        print("total val acc:", self.val_accuracy.compute())
+        print("*" * 25)
+
+    def training_epoch_end(self, outs):
+        # print(   compute_epoch_loss_from_outputs(outs))
+        print("total training acc:", self.train_accuracy.compute())
+
     def test_epoch_end(self, outs):
         # print(   compute_epoch_loss_from_outputs(outs))
         print("total test acc:", self.test_accuracy.compute())
+
+    def configure_optimizers(self):
+        decayRate = 0.96
+        optimizer = Adam(self.parameters(), lr=LR)
+        scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer=optimizer, gamma=decayRate)
+
+        return [optimizer], [scheduler]
 
 
 def main():
@@ -446,6 +708,10 @@ def main():
 
     # print(meta_pd.head(10))
 
+    ## Do the length Normalization
+    tmp_pd = data_len_norm(meta_pd)
+    meta_pd = tmp_pd
+
     ## Data Visualization: ratio of labels
     cates = pd.Categorical(meta_pd['label'], ordered=True).categories
     cate_counts = meta_pd['encoded_label'].value_counts().to_list()
@@ -457,11 +723,11 @@ def main():
     axs.bar(cate_counts_dic.keys(), cate_counts_dic.values())
 
     ##length of data
-    MAX_LEN = meta_pd["length"].max()[0]  # 18286
-    MIN_LEN = meta_pd["length"].min()[0]  ## 2714
+    # MAX_LEN = meta_pd["length"].max()[0]  # 18286
+    # MIN_LEN = meta_pd["length"].min()[0]  ## 2714
 
     ## Data preprocessing
-    meta_precessed_pd = preprocess(meta=meta_pd, func_list=[ecg_pad_repeat, ecg_fourier, ecg_norm, ecg_stand])
+    meta_precessed_pd = preprocess(meta=meta_pd, func_list=[ecg_len_norm, ecg_norm])
 
     ### Split the data into training , val and test set
     train_pd, test_pd = train_test_split(meta_precessed_pd, test_size=0.3, random_state=42,
@@ -493,12 +759,14 @@ def main():
     ecg_test_dataset = ecg_Dataset(X_test_pd, y_test_pd)
     ecg_test_dataloader = DataLoader(ecg_test_dataset, batch_size=BATCH_SIZE, shuffle=True)
 
-    model = MyModel(9144, 3000, 2000, 1000, 500, 4, [ecg_train_dataloader, ecg_val_dataloader, ecg_test_dataloader])
-    trainer = pl.Trainer(accelerator="gpu", devices=1, max_epochs=13, gpus=0)  #
+
+
+    model = MyModel(1, 4, [ecg_train_dataloader, ecg_val_dataloader, ecg_test_dataloader])
+    trainer = pl.Trainer(accelerator="gpu", devices=1, max_epochs=100, gpus=0)  #
 
     # trainer = pl.Trainer(accelerator="gpu", devices=1, max_epochs=1000, gpus=0,callbacks=[EarlyStopping(monitor="val_loss", mode="min")]) #
     trainer.fit(model)
-    torch.save(model, "tmp/saved_model")
+    torch.save(model.state_dict(),"mymodel")
     trainer.validate(model)
     trainer.test(model)
 
