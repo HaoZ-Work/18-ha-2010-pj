@@ -64,18 +64,19 @@ def predict_labels(ecg_leads : List[np.ndarray], fs : float, ecg_names : List[st
 # Euer Code ab hier
     ## Load data and create meta data
 
+
     test_data_dir = "../test/"
     test_data_path = glob(test_data_dir + "*mat")
     test_path_id_dic = {x.split('/')[-1].split('.')[0]: x for x in test_data_path}
 
-    reference = pd.read_csv(test_data_dir + "REFERENCE.csv", header=None)
-    reference = reference.rename(columns={0: 'id', 1: "label"})
-    reference_dic = dict(zip(reference['id'].to_list(), reference['label'].to_list()))
+    # reference = pd.read_csv(test_data_dir + "REFERENCE.csv", header=None)
+    # reference = reference.rename(columns={0: 'id', 1: "label"})
+    # reference_dic = dict(zip(reference['id'].to_list(), reference['label'].to_list()))
 
     meta_pd = pd.DataFrame(columns=["id", "path", "label"])
     meta_pd['id'] = test_path_id_dic.keys()
     meta_pd['path'] = meta_pd['id'].map(test_path_id_dic.get)
-    meta_pd['label'] = meta_pd['id'].map(reference_dic.get)
+    # meta_pd['label'] = meta_pd['id'].map(reference_dic.get)
     meta_pd['encoded_label'] = pd.Categorical(meta_pd['label']).codes
     meta_pd['data'] = meta_pd['path'].map(get_mat)
     meta_pd['mean'] = meta_pd['data'].map(np.mean)
