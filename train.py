@@ -53,7 +53,7 @@ def preprocess(meta, to_path='precessed_data/normalized/', func_list=[], store=F
     # tmp_meta['id'] = meta['id']
 
     tmp_meta = meta.copy()
-    tmp_meta['to_path'] = to_path + meta['id'] + '.npy'
+    # tmp_meta['to_path'] = to_path + meta['id'] + '.npy'
 
     tmp_meta['preprocessed_data'] = meta['data']
     for f in func_list:
@@ -192,7 +192,7 @@ def data_len_norm(meta):
             for n in adding_list:
                 new_recording = meta.iloc[row[0]].copy()
                 new_recording['data'] = n
-                new_recording['id'] = 'extra_' + new_recording['id']
+                #new_recording['id'] = 'extra_' + new_recording['id']
                 new_recording['length'] = 9000
                 # print(new_recording)
                 re_pd = re_pd.append(new_recording, ignore_index=True)
