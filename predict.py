@@ -77,7 +77,8 @@ def predict_labels(ecg_leads : List[np.ndarray], fs : float, ecg_names : List[st
     meta_pd['id'] = test_path_id_dic.keys()
     meta_pd['path'] = meta_pd['id'].map(test_path_id_dic.get)
     # meta_pd['label'] = meta_pd['id'].map(reference_dic.get)
-    meta_pd['encoded_label'] = pd.Categorical(meta_pd['label']).codes
+#    meta_pd['encoded_label'] = pd.Categorical(meta_pd['label']).codes
+    meta_pd['encoded_label'] = 0
     meta_pd['data'] = meta_pd['path'].map(get_mat)
     meta_pd['mean'] = meta_pd['data'].map(np.mean)
     meta_pd['std'] = meta_pd['data'].map(np.std)
