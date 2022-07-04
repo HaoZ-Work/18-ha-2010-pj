@@ -92,10 +92,10 @@ def predict_labels(ecg_leads : List[np.ndarray], fs : float, ecg_names : List[st
 
         meta_precessed_pd = preprocess(meta=meta_pd, func_list=[ecg_len_norm, ecg_norm, ])
 
-        print(meta_precessed_pd.head())
+        # print(meta_precessed_pd.head())
 
         ecg_test_dataset = ecg_Dataset(meta_precessed_pd['preprocessed_data'], meta_precessed_pd['encoded_label'])
-        ecg_test_dataloader = DataLoader(ecg_test_dataset, batch_size=10)
+        ecg_test_dataloader = DataLoader(ecg_test_dataset, batch_size=100)
 
 
         #saved_model = MyModel(4501, 3000, 2000, 1000, 500, 4, [])
@@ -105,10 +105,13 @@ def predict_labels(ecg_leads : List[np.ndarray], fs : float, ecg_names : List[st
         preds = trainer.predict(saved_model, dataloaders=ecg_test_dataloader)
         predictions = list()
         true_labels = ['A','N','O','~']
+        # preds=torch.randint(0,3,(2530,))
         # print(preds)
-        for idx, pred in enumerate(*preds):
-            # print(pred)
-            predictions.append((meta_precessed_pd['id'].iloc[idx], true_labels[idx]))
+        
+        for batch in preds:
+            for idx, pred in enumerate(batch):
+                # print(idx,pred)
+                predictions.append((meta_precessed_pd['id'].iloc[idx], true_labels[pred]))
 
         return predictions
         # print(predictions)
