@@ -1,9 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-
 Skript testet das vortrainierte Modell
-
-
 @author: Christoph Hoog Antink, Maurice Rohr
 """
 
@@ -64,53 +61,76 @@ def predict_labels(ecg_leads : List[np.ndarray], fs : float, ecg_names : List[st
 # Euer Code ab hier
     ## Load data and create meta data
 
-
-    test_data_dir = "../test/"
-    test_data_path = glob(test_data_dir + "*mat")
-    test_path_id_dic = {x.split('/')[-1].split('.')[0]: x for x in test_data_path}
+    # print(ecg_leads)
+    # test_data_dir = "../test/"
+    # test_data_path = glob(test_data_dir + "*mat")
+    # test_path_id_dic = {x.split('/')[-1].split('.')[0]: x for x in test_data_path}
 
     # reference = pd.read_csv(test_data_dir + "REFERENCE.csv", header=None)
     # reference = reference.rename(columns={0: 'id', 1: "label"})
     # reference_dic = dict(zip(reference['id'].to_list(), reference['label'].to_list()))
+    try:
+        print('creating the meta data...')
+        meta_pd = pd.DataFrame(columns=[ "id","data"])
+        meta_pd['id'] = ecg_names
+        meta_pd['data'] = ecg_leads
+        # print(meta_pd.head())
+        # meta_pd = pd.DataFrame(columns=["id", "path", "label"])
+        # meta_pd['id'] = test_path_id_dic.keys()
+        # meta_pd['path'] = meta_pd['id'].map(test_path_id_dic.get)
+        # meta_pd['label'] = meta_pd['id'].map(reference_dic.get)
+    #    meta_pd['encoded_label'] = pd.Categorical(meta_pd['label']).codes
+        meta_pd['encoded_label'] = 0
+        # meta_pd['data'] = meta_pd['path'].map(get_mat)
+        meta_pd['mean'] = meta_pd['data'].map(np.mean)
+        meta_pd['std'] = meta_pd['data'].map(np.std)
+        meta_pd['length'] = meta_pd['data'].map(np.shape)
+        # print(meta_pd.head().data)
 
-    meta_pd = pd.DataFrame(columns=["id", "path", "label"])
-    meta_pd['id'] = test_path_id_dic.keys()
-    meta_pd['path'] = meta_pd['id'].map(test_path_id_dic.get)
-    # meta_pd['label'] = meta_pd['id'].map(reference_dic.get)
-    meta_pd['encoded_label'] = pd.Categorical(meta_pd['label']).codes
-    meta_pd['data'] = meta_pd['path'].map(get_mat)
-    meta_pd['mean'] = meta_pd['data'].map(np.mean)
-    meta_pd['std'] = meta_pd['data'].map(np.std)
-    meta_pd['length'] = meta_pd['data'].map(np.shape)
-    # print(meta_pd.head().data)
+        print("preprocessing the data...")
+        meta_precessed_pd = preprocess(meta=meta_pd, func_list=[ecg_len_norm, ecg_norm, ])
+
+        print("creating QRS data...")
+        meta_precessed_pd['clean'] = meta_precessed_pd['preprocessed_data'].apply(nk.ecg_clean,sampling_rate = fs)
+        meta_precessed_pd['hb_seg'] = meta_precessed_pd['clean'].map(get_segment)
+        meta_precessed_pd['hb_seg'] = meta_precessed_pd['hb_seg'].apply(signal.resample,num=300)
+
+        # print(meta_precessed_pd.head())
+
+        print("creating the dataloader....")
+        BATCH_SIZE = 100
+        ecg_test_dataset = ecg_Dataset(meta_precessed_pd['preprocessed_data'], meta_precessed_pd['encoded_label'],meta_precessed_pd['hb_seg'])
+        ecg_test_dataloader = DataLoader(ecg_test_dataset, batch_size=BATCH_SIZE)
 
 
-    meta_precessed_pd = preprocess(meta=meta_pd, func_list=[ecg_len_norm, ecg_norm, ])
+        #saved_model = MyModel(4501, 3000, 2000, 1000, 500, 4, [])
+        print("Loading the model...")
+        # saved_model = MyModel(1, 4,[])
+        saved_model = MyModel(cin=1,cout=4, lstm_in=1,lstm_size=5,lstm_layer_num=2, dataloaders=[])
 
+        saved_model.load_state_dict(torch.load(model_name))
+        trainer = pl.Trainer(accelerator="gpu", devices=1, gpus=0)
+        print("getting the predictions...")
+        preds = trainer.predict(saved_model, dataloaders=ecg_test_dataloader)
+        predictions = list()
+        true_labels = ['A','N','O','~']
+        # preds=torch.randint(0,3,(2530,))
+        # print(preds)
+        
+        for b_idx,batch in  enumerate(preds) :
+            for idx, pred in enumerate(batch):
+                # print(idx,pred)
+                predictions.append((meta_precessed_pd['id'].iloc[int(b_idx*100+idx)], true_labels[pred]))
 
-
-    ecg_test_dataset = ecg_Dataset(meta_precessed_pd['preprocessed_data'], meta_precessed_pd['encoded_label'])
-    ecg_test_dataloader = DataLoader(ecg_test_dataset, batch_size=10)
-
-
-    #saved_model = MyModel(4501, 3000, 2000, 1000, 500, 4, [])
-    saved_model = MyModel(1, 4,[])
-    saved_model.load_state_dict(torch.load("mymodel"))
-    trainer = pl.Trainer(accelerator="gpu", devices=1, gpus=0)
-    preds = trainer.predict(saved_model, dataloaders=ecg_test_dataloader)
-    predictions = list()
-    true_labels = ['A','N','O','~']
-    # print(preds)
-    for idx, pred in enumerate(*preds):
-        # print(pred)
-        predictions.append((meta_precessed_pd['id'].iloc[idx], true_labels[idx]))
-
-    # print(predictions)
+        return predictions
+        # print(predictions)
+    
+    except Exception as e:
+            #print something
+            print(e)
 
 
     # predictions.append((ecg_names[idx], 'A'))
 #------------------------------------------------------------------------------    
     return predictions # Liste von Tupels im Format (ecg_name,label) - Muss unverändert bleiben!
                                
-                               
-        
