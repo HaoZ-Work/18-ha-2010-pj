@@ -42,6 +42,15 @@ fs = 300
 
 
 def get_mat(mat_path):
+    '''
+    Load the data from mat files
+
+    Args:
+        mat_path: str, path of mat file
+    
+    Return:
+        np.array
+    '''
     s = sio.loadmat(mat_path)
     return s['val'][0]
 
@@ -161,6 +170,17 @@ def ecg_stand(ecg_np):
 
 
 def cut_recording(ecg: np.array, length_threshold=9000):
+    '''
+    Cut the sample into length 9000
+
+    Args:
+        ecg: np.array
+        length_threshold: int
+    
+    Return :
+        a list of cut samples
+
+    '''
     len_overlap = int(0.5 * length_threshold)
     start = 0
     end = 9000
@@ -329,7 +349,9 @@ def MLP(X_train_mlp, y_train_mlp, X_val_mlp, y_val_mlp, X_test_mlp, y_test_mlp):
 
 def get_segment(ecg_np):
     '''
-    
+    Get the QRS segmentation. Using nk to get all heart beat segmentations of one sample. And use average value to combine all segs into one np.array
+
+
     Args:
         ecg_np: np.array, cleaned ecg data, (9000)
     
@@ -355,12 +377,20 @@ def get_segment(ecg_np):
 
 
 class Reshape(nn.Module):
+    '''
+    For using LSTM model in torch.seq()
+    
+    '''
     def __init__(self, *args):
         super(Reshape, self).__init__()
         self.shape = args
     def forward(self, x):
         return x.view(x.shape[1],1)
 class extract_tensor(nn.Module):
+    '''
+    For using LSTM model in torch.seq()
+    
+    '''
     def forward(self,x):
         # Output shape (batch, features, hidden)
         out,hs_cs = x
@@ -371,6 +401,9 @@ class ecg_Dataset(Dataset):
     def __init__(self, X_pd,y_pd,hb_pd):
         """
         Args:
+            X_pd: pd.DataFrame, contains training samples
+            y_pd: pd.DataFrame, contains training labels
+            hb_pd: pd.DataFrame, contains training QRS segmentation
 
         """
         self.X_pd = X_pd
@@ -383,371 +416,7 @@ class ecg_Dataset(Dataset):
     def __getitem__(self, idx):
 
         return self.X_pd.iloc[idx], self.y_pd.iloc[idx], self.hb_pd.iloc[idx]
-# class ecg_Dataset(Dataset):
-#     def __init__(self, X_pd, y_pd):
-#         """
-#         Args:
 
-#         """
-#         self.X_pd = X_pd
-#         self.y_pd = y_pd
-
-#     def __len__(self):
-#         return len(self.X_pd)
-
-#     def __getitem__(self, idx):
-#         return self.X_pd.iloc[idx], self.y_pd.iloc[idx]
-
-
-# class MyModel(pl.LightningModule):
-#     def __init__(
-#             self,
-#             num_inputs,
-#             num_hidden_1,
-#             num_hidden_2,
-#             num_hidden_3,
-#             num_hidden_4,
-#             num_outputs,
-#             dataloaders,
-#     ):
-#         super().__init__()
-#
-#         self.linear1 = nn.Linear(num_inputs, num_hidden_1)
-#         self.ac1 = nn.ReLU()
-#
-#         self.linear2 = nn.Linear(num_hidden_1, num_hidden_2)
-#         self.ac2 = nn.ReLU()
-#
-#         self.linear3 = nn.Linear(num_hidden_2, num_hidden_3)
-#         self.ac3 = nn.ReLU()
-#
-#         self.linear4 = nn.Linear(num_hidden_3, num_hidden_4)
-#         self.ac4 = nn.ReLU()
-#
-#         self.out = nn.Linear(num_hidden_4, num_outputs)
-#
-#         self.softmax = nn.Softmax(dim=1)
-#
-#         self.criterion = nn.CrossEntropyLoss()
-#
-#         self.train_accuracy = torchmetrics.F1Score()
-#
-#         self.val_accuracy = torchmetrics.F1Score()
-#         self.test_accuracy = torchmetrics.F1Score()
-#         self.dataloaders = dataloaders
-#
-#     def forward(self, inputs, labels=None):
-#
-#         inputs = inputs.float()
-#
-#         outputs = self.linear1(inputs)
-#         outputs = self.ac1(outputs)
-#
-#         outputs = self.linear2(outputs)
-#         outputs = self.ac2(outputs)
-#
-#         outputs = self.linear3(outputs)
-#         outputs = self.ac3(outputs)
-#
-#         outputs = self.linear4(outputs)
-#         outputs = self.ac4(outputs)
-#
-#         outputs = self.out(outputs)
-#
-#         outputs = self.softmax(outputs)
-#
-#         return outputs
-#     def predict_step(self, batch, batch_idx):
-#         inputs, labels = batch
-#
-#         labels = labels.long()
-#
-#         outputs = self(inputs)
-#
-#         # outputs = torch.argmax(outputs, dim=1)
-#
-#         preds = torch.argmax(outputs, dim=1)
-#
-#
-#
-#         return preds
-#
-#
-#     def train_dataloader(self):
-#         # ecg_train_dataset = ecg_Dataset(X_train_pd, y_train_pd)
-#         # return DataLoader(ecg_train_dataset, batch_size=100)
-#
-#         return self.dataloaders[0]
-#
-#     def val_dataloader(self):
-#         # ecg_val_dataset = ecg_Dataset(X_val_pd, y_val_pd)
-#         # return DataLoader(ecg_val_dataset, batch_size=100)
-#
-#         return self.dataloaders[1]
-#
-#     def test_dataloader(self):
-#         # ecg_test_dataset = ecg_Dataset(X_test_pd, y_test_pd)
-#         # return DataLoader(ecg_test_dataset, batch_size=100)
-#         return self.dataloaders[2]
-#
-#     def training_step(self, batch, batch_idx):
-#         inputs, labels = batch
-#
-#         labels = labels.long()
-#
-#         outputs = self(inputs)
-#
-#         # outputs = torch.argmax(outputs, dim=1)
-#
-#         preds = torch.argmax(outputs, dim=1)
-#         # print(preds)
-#         self.train_accuracy(preds, labels)
-#
-#         # print("training acc:",self.train_accuracy(outputs, labels))
-#         loss = self.criterion(outputs, labels)
-#         # print("trainingh Loss:",loss)
-#
-#         self.log("train_loss", loss)
-#
-#         return loss
-#
-#     def validation_step(self, batch, batch_idx):
-#         inputs, labels = batch
-#         # inputs = inputs.long().view(inputs.size(0), -1)
-#         labels = labels.long()
-#
-#         outputs = self(inputs)
-#         # outputs = torch.argmax(outputs, dim=1)
-#         preds = torch.argmax(outputs, dim=1)
-#         self.val_accuracy(preds, labels)
-#         # print("val acc:",self.val_accuracy(outputs, labels))
-#         # print("total val acc:",self.val_accuracy.compute())
-#
-#         loss = self.criterion(outputs, labels)
-#         # print("VAL Loss:",loss)
-#
-#         self.log("val_loss", loss)
-#
-#     def validation_epoch_end(self, outs):
-#         print("total val acc:", self.val_accuracy.compute())
-#         print("*" * 25)
-#
-#     def training_epoch_end(self, outs):
-#         # print(   compute_epoch_loss_from_outputs(outs))
-#         print("total training acc:", self.train_accuracy.compute())
-#
-#     def configure_optimizers(self):
-#         decayRate = 0.96
-#         optimizer = Adam(self.parameters(), lr=LR)
-#         scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer=optimizer, gamma=decayRate)
-#
-#         return [optimizer], [scheduler]
-#
-#     def test_step(self, batch, batch_idx):
-#         inputs, labels = batch
-#         # inputs = inputs.long().view(inputs.size(0), -1)
-#         labels = labels.long()
-#
-#         outputs = self(inputs)
-#         # outputs = torch.argmax(outputs, dim=1)
-#         preds = torch.argmax(outputs, dim=1)
-#
-#         # print(preds)
-#
-#         self.test_accuracy(preds, labels)
-#
-#     def test_epoch_end(self, outs):
-#         # print(   compute_epoch_loss_from_outputs(outs))
-#         print("total test acc:", self.test_accuracy.compute())
-
-# class MyModel(pl.LightningModule):
-#     def __init__(
-#             self,
-#             cin,
-#             cout,
-
-#             dataloaders,
-#     ):
-#         super().__init__()
-
-#         self.cin = cin,
-#         self.cout = cout
-#         self.seq_fft = nn.Sequential(
-#             nn.Conv1d(1, 32, 5),
-#             nn.ReLU(inplace=True),
-#             nn.BatchNorm1d(32),
-#             nn.MaxPool1d(2),
-
-#             nn.Conv1d(32, 32, 5),
-#             nn.ReLU(inplace=True),
-#             nn.MaxPool1d(2),
-
-#             nn.Conv1d(32, 64, 5),
-#             nn.ReLU(inplace=True),
-#             nn.MaxPool1d(2),
-
-#             nn.Conv1d(64, 64, 5),
-#             nn.ReLU(inplace=True),
-#             nn.MaxPool1d(2),
-
-#             nn.Conv1d(64, 128, 5),
-#             nn.ReLU(inplace=True),
-#             nn.MaxPool1d(2),
-
-#             nn.Conv1d(128, 128, 5),
-#             nn.ReLU(inplace=True),
-#             nn.MaxPool1d(2),
-
-#             nn.Conv1d(128, 256, 5),
-#             nn.ReLU(inplace=True),
-#             nn.MaxPool1d(2),
-
-#             nn.Conv1d(256, 256, 5),
-#             nn.ReLU(inplace=True),
-#             nn.MaxPool1d(2),
-#             nn.Dropout(0.5),
-
-#             nn.Conv1d(256, 512, 5),
-#             nn.ReLU(inplace=True),
-#             nn.MaxPool1d(2),
-
-#             nn.Conv1d(512, 512, 5),
-#             nn.ReLU(inplace=True),
-#             nn.MaxPool1d(2),
-#             nn.Dropout(0.5),
-
-#             nn.Flatten(),
-#             nn.Linear(2048, 128),
-#             nn.ReLU(inplace=True),
-#             nn.Dropout(0.5),
-#             nn.Linear(128, 32),
-#             nn.ReLU(inplace=True),
-#             nn.Linear(32, self.cout),
-#             nn.Softmax(dim=1)
-
-#         )
-
-#         self.criterion = nn.CrossEntropyLoss()
-
-#         self.train_accuracy = torchmetrics.F1Score()
-
-#         self.val_accuracy = torchmetrics.F1Score()
-#         self.test_accuracy = torchmetrics.F1Score()
-#         self.dataloaders = dataloaders
-
-#     def forward(self, inputs, labels=None):
-#         inputs = inputs.float()
-
-#         outputs = self.seq_fft(inputs)
-
-#         return outputs
-
-#     def predict_step(self, batch, batch_idx):
-#         inputs, labels = batch
-#         inputs = inputs.reshape(inputs.shape[0], 1, inputs.shape[1])
-#         # inputs = inputs.long().view(inputs.size(0), -1)
-#         labels = labels.long()
-
-
-#         outputs = self(inputs)
-
-#         # outputs = torch.argmax(outputs, dim=1)
-
-#         preds = torch.argmax(outputs, dim=1)
-
-#         return preds
-
-#     def train_dataloader(self):
-#         # ecg_train_dataset = ecg_Dataset(X_train_pd, y_train_pd)
-#         # return DataLoader(ecg_train_dataset, batch_size=100)
-
-#         return self.dataloaders[0]
-
-#     def val_dataloader(self):
-#         # ecg_val_dataset = ecg_Dataset(X_val_pd, y_val_pd)
-#         # return DataLoader(ecg_val_dataset, batch_size=100)
-
-#         return self.dataloaders[1]
-
-#     def test_dataloader(self):
-#         # ecg_test_dataset = ecg_Dataset(X_test_pd, y_test_pd)
-#         # return DataLoader(ecg_test_dataset, batch_size=100)
-#         return self.dataloaders[2]
-
-#     def training_step(self, batch, batch_idx):
-#         inputs, labels = batch
-
-#         inputs = inputs.reshape(inputs.shape[0], 1, inputs.shape[1])
-#         # print(inputs.shape)
-#         labels = labels.long()
-
-#         outputs = self(inputs)
-
-#         # outputs = torch.argmax(outputs, dim=1)
-
-#         preds = torch.argmax(outputs, dim=1)
-#         # print(preds)
-#         self.train_accuracy(preds, labels)
-
-#         # print("training acc:",self.train_accuracy(outputs, labels))
-#         loss = self.criterion(outputs, labels)
-#         # print("trainingh Loss:",loss)
-
-#         self.log("train_loss", loss)
-
-#         return loss
-
-#     def validation_step(self, batch, batch_idx):
-#         inputs, labels = batch
-#         inputs = inputs.reshape(inputs.shape[0], 1, inputs.shape[1])
-#         # inputs = inputs.long().view(inputs.size(0), -1)
-#         labels = labels.long()
-
-#         outputs = self(inputs)
-#         # outputs = torch.argmax(outputs, dim=1)
-#         preds = torch.argmax(outputs, dim=1)
-#         self.val_accuracy(preds, labels)
-#         # print("val acc:",self.val_accuracy(outputs, labels))
-#         # print("total val acc:",self.val_accuracy.compute())
-
-#         loss = self.criterion(outputs, labels)
-#         # print("VAL Loss:",loss)
-
-#         self.log("val_loss", loss)
-
-#     def test_step(self, batch, batch_idx):
-#         inputs, labels = batch
-#         inputs = inputs.reshape(inputs.shape[0], 1, inputs.shape[1])
-
-#         # inputs = inputs.long().view(inputs.size(0), -1)
-#         labels = labels.long()
-
-#         outputs = self(inputs)
-#         # outputs = torch.argmax(outputs, dim=1)
-#         preds = torch.argmax(outputs, dim=1)
-
-#         # print(preds)
-
-#         self.test_accuracy(preds, labels)
-
-#     def validation_epoch_end(self, outs):
-#         print("total val acc:", self.val_accuracy.compute())
-#         print("*" * 25)
-
-#     def training_epoch_end(self, outs):
-#         # print(   compute_epoch_loss_from_outputs(outs))
-#         print("total training acc:", self.train_accuracy.compute())
-
-#     def test_epoch_end(self, outs):
-#         # print(   compute_epoch_loss_from_outputs(outs))
-#         print("total test acc:", self.test_accuracy.compute())
-
-#     def configure_optimizers(self):
-#         decayRate = 0.96
-#         optimizer = Adam(self.parameters(), lr=LR)
-#         scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer=optimizer, gamma=decayRate)
-
-#         return [optimizer], [scheduler]
 
 class MyModel(pl.LightningModule):
     def __init__(
@@ -993,8 +662,7 @@ class MyModel(pl.LightningModule):
 def main():
     ## Load data and create meta data
     print("loading training data...")
-    #training_data_dir = "/home/kurse/kurs00056/hz53kahe/WIM/training/"
-    training_data_dir = "/home/kurse/kurs00056/hz53kahe/physionet.org/files/challenge-2017/1.0.0/training2017/"
+    training_data_dir = "/home/kurse/kurs00056/hz53kahe/WIM/training/"
     training_data_path = glob(training_data_dir + "*mat")
     training_path_id_dic = {x.split('/')[-1].split('.')[0]: x for x in training_data_path}
 
@@ -1052,38 +720,10 @@ def main():
     meta_precessed_pd['seg_len'] = meta_precessed_pd['hb_seg'].map(len)
     meta_precessed_pd['hb_seg'] = meta_precessed_pd['hb_seg'].apply(signal.resample,num=300)
 
-    # if exists('/home/kurse/kurs00056/hz53kahe/WIM/18-ha-2010-pj/meta_precessed_pd.csv'):
-    #     print("loading saved preprocessed data...")
-    #     meta_precessed_pd = pd.read_csv('/home/kurse/kurs00056/hz53kahe/WIM/18-ha-2010-pj/meta_precessed_pd.csv')
-    #     ## TODO: need to check the form of loaded pd.
-    #     print(meta_precessed_pd.columns)
-    #     print(meta_precessed_pd.head())
-
-    # else:
-    #     meta_precessed_pd['hb_seg'] = meta_precessed_pd['clean'].map(get_segment)
-    #     meta_precessed_pd['seg_len'] = meta_precessed_pd['hb_seg'].map(len)
-    #     meta_precessed_pd['hb_seg'] = meta_precessed_pd['hb_seg'].apply(signal.resample,num=300)
-
-    #     meta_precessed_pd.to_csv('meta_precessed_pd.csv')
-
-
-    # ### Split the data into training , val and test set
-    # train_pd, test_pd = train_test_split(meta_precessed_pd, test_size=0.3, random_state=42,
-    #                                      stratify=meta_precessed_pd['encoded_label'])
-
-    # train_pd_ros = data_ros(train_pd, cate_counts_dic)
-    # X_train_pd = train_pd_ros['preprocessed_data']
-    # y_train_pd = train_pd_ros['encoded_label']
-    # X_val_pd, X_test_pd, y_val_pd, y_test_pd = train_test_split(test_pd['preprocessed_data'], test_pd['encoded_label'],
-    #                                                             test_size=0.33, random_state=42,
-    #                                                             stratify=test_pd['encoded_label'])
-    # X_train, y_train = pd_2array(X_train_pd, y_train_pd)
-    # X_val, y_val = pd_2array(X_val_pd, y_val_pd)
-    # X_test, y_test = pd_2array(X_test_pd, y_test_pd)
 
     ### Split the data into training , val and test set
     print("Spliting the data...")
-    train_pd,  test_pd = train_test_split(meta_precessed_pd, test_size=0.1, random_state=42,stratify =meta_precessed_pd['encoded_label'] )
+    train_pd,  test_pd = train_test_split(meta_precessed_pd, test_size=0.01, random_state=42,stratify =meta_precessed_pd['encoded_label'] )
     train_pd_ros = data_ros(train_pd,cate_counts_dic )
 
     X_train_pd = train_pd_ros[['preprocessed_data','hb_seg']]
@@ -1123,10 +763,7 @@ def main():
 
     ecg_val_dataset = ecg_Dataset(X_val_pd, y_val_pd,X_val_hb_pd)
     ecg_val_dataloader = DataLoader(ecg_val_dataset, batch_size=BATCH_SIZE, shuffle=True)
-    # print(next(iter(ecg_val_dataloader)))
-    # for i in next(iter(ecg_val_dataloader)):
-    #     print(i)
-    #     print("*"*20)
+
     ecg_test_dataset = ecg_Dataset(X_test_pd, y_test_pd,X_test_hb_pd)
     ecg_test_dataloader = DataLoader(ecg_test_dataset, batch_size=1000, shuffle=True)
 
